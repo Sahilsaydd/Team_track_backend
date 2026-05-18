@@ -13,3 +13,5 @@ Base = declarative_base()
 
 from app.modules.users.models.user import User
 from app.modules.roles.model.role import Role
+from app.modules.groups.models.group import Group
+from app.modules.groups.models.group_member import GroupMember
