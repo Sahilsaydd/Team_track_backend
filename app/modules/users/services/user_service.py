@@ -88,7 +88,7 @@ async def get_all_employees_service(db:AsyncSession):
 
 
 async def get_all_admins(db:AsyncSession):
-    result = await db.execute(select(User).options(joinedload(User.role)).join(Role).where(Role.name=="SuperAdmin",User.is_active==True))
+    result = await db.execute(select(User).options(joinedload(User.role)).join(Role).where(Role.name=="Admin",User.is_active==True))
 
     admins = result.scalars().all()
     return [

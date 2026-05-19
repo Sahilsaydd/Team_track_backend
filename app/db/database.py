@@ -15,3 +15,14 @@ from app.modules.users.models.user import User
 from app.modules.roles.model.role import Role
 from app.modules.groups.models.group import Group
 from app.modules.groups.models.group_member import GroupMember
+from app.modules.tasks.models.task import Task
+
+from app.modules.tasks.models.task_log import TaskLog
+
+from app.modules.tasks.models.task_comment import TaskComment
+
+from app.modules.tasks.models.task_attachments import TaskAttachment
+
+from app.modules.tasks.models.task_review import TaskReview
+
+from app.modules.notification.model.notification import Notification
