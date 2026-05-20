@@ -6,12 +6,14 @@ from app.modules.groups.models.group_member import GroupMember
 from app.modules.tasks.models.task import Task
 from app.modules.tasks.models.task_review import TaskReview
 from app.modules.tasks.models.task_log import TaskLog
+from app.modules.tasks.models.task_evidence import TaskEvidence
 
 from app.modules.notification.model.notification import (
     Notification
 )
-
+from sqlalchemy.orm import selectinload
 from app.modules.users.models.user import User
+from app.core.file_upload import save_upload_file
 
 from app.modules.tasks.enums import (
     ApprovalStatus,
@@ -22,7 +24,6 @@ from app.modules.tasks.enums import (
 
 async def create_task_service(db: AsyncSession,data,current_user):
 
-    # CHECK CURRENT USER IS GROUP LEAD
 
     leader_result = await db.execute(
         select(GroupMember).where(
@@ -42,7 +43,6 @@ async def create_task_service(db: AsyncSession,data,current_user):
             detail="Only group leader can assign tasks"
         )
 
-    # CHECK ASSIGNED USER BELONGS TO GROUP
 
     member_result = await db.execute(
         select(GroupMember).where(
@@ -61,7 +61,6 @@ async def create_task_service(db: AsyncSession,data,current_user):
             detail="Assigned user is not member of this group"
         )
 
-    # PREVENT LEAD TO LEAD ASSIGNMENT
 
     if member.role_in_group == "Lead":
 
@@ -70,7 +69,6 @@ async def create_task_service(db: AsyncSession,data,current_user):
             detail="Cannot assign task to another lead"
         )
 
-    # CREATE TASK
 
     task = Task(
 
@@ -97,7 +95,6 @@ async def create_task_service(db: AsyncSession,data,current_user):
 
     db.add(task)
 
-    # CREATE NOTIFICATION
 
     notification = Notification(
 
@@ -118,11 +115,140 @@ async def create_task_service(db: AsyncSession,data,current_user):
 
     return task
 
-async def create_self_task_service(
-    db: AsyncSession,
-    data,
-    current_user
-):
+
+
+
+
+async def create_hierarchy_task_service(db: AsyncSession,data,current_user):
+
+    current_user_result = await db.execute(
+        select(User)
+        .options(selectinload(User.role))
+        .where(User.id == current_user.id)
+    )
+
+    current_user = current_user_result.scalar_one_or_none()
+
+    if not current_user:
+        raise HTTPException(
+            status_code=404,
+            detail="Current user not found"
+        )
+
+    assigned_user_result = await db.execute(
+        select(User)
+        .options(selectinload(User.role))
+        .where(User.id == data.assigned_to)
+    )
+
+    assigned_user = assigned_user_result.scalar_one_or_none()
+
+    if not assigned_user:
+        raise HTTPException(
+            status_code=404,
+            detail="Assigned user not found"
+        )
+
+    current_role = getattr(getattr(current_user, "role", None), "name", None)
+    target_role = getattr(getattr(assigned_user, "role", None), "name", None)
+
+    if not current_role:
+        raise HTTPException(
+            status_code=403,
+            detail="Current user role not found"
+        )
+
+    if not target_role:
+        raise HTTPException(
+            status_code=404,
+            detail="Assigned user role not found"
+        )
+
+    if current_role == "SuperAdmin":
+
+        if target_role != "Admin":
+
+            raise HTTPException(
+                status_code=403,
+                detail="SuperAdmin can assign task only to Admin"
+            )
+
+    elif current_role == "Admin":
+
+        if target_role not in {"Employee", "Admin"}:
+
+            raise HTTPException(
+                status_code=403,
+                detail="Admin can assign personal tasks only to Employee or Admin users"
+            )
+
+    else:
+
+        raise HTTPException(
+            status_code=403,
+            detail="You are not allowed to assign tasks"
+        )
+
+    task = Task(
+
+        title=data.title,
+
+        description=data.description,
+
+        priority=data.priority,
+
+        deadline=data.deadline,
+        task_type="personal",
+        group_id=None,
+        created_by=current_user.id,
+        assigned_by=current_user.id,
+        assigned_to=assigned_user.id,
+        submitted_to=current_user.id,
+        is_self_task=False
+    )
+
+    db.add(task)
+
+    notification = Notification(
+
+        user_id=assigned_user.id,
+
+        title="New Task Assigned",
+
+        message=f"You received task '{task.title}'",
+
+        notification_type=f"task_assigned '{task.task_type}'"
+    )
+
+    db.add(notification)
+
+    await db.commit()
+
+    await db.refresh(task)
+
+    return {
+        "message": "Task assigned successfully",
+        "task": {
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "status": task.status,
+            "approval_status": task.approval_status,
+            "priority": task.priority,
+            "created_by": task.created_by,
+            "assigned_by": task.assigned_by,
+            "assigned_to": task.assigned_to,
+            "submitted_to": task.submitted_to,
+            "task_type": task.task_type,
+            "group_id": task.group_id,
+            "is_self_task": task.is_self_task,
+            "deadline": task.deadline,
+            "created_at": task.created_at,
+        }
+    }
+   
+
+async def create_self_task_service(db: AsyncSession,data,current_user):
 
     task = Task(
 
@@ -153,12 +279,7 @@ async def create_self_task_service(
 
 
 
-async def update_task_status_service(
-    db: AsyncSession,
-    task_id: int,
-    data,
-    current_user
-):
+async def update_task_status_service(db: AsyncSession,task_id: int,data,current_user):
 
     result = await db.execute(
         select(Task).where(
@@ -169,16 +290,10 @@ async def update_task_status_service(
     task = result.scalar_one_or_none()
 
     if not task:
-        raise HTTPException(
-            status_code=404,
-            detail="Task not found"
-        )
+        raise HTTPException(status_code=404,detail="Task not found")
 
     if task.assigned_to != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="Not allowed"
-        )
+        raise HTTPException(status_code=403,detail="Not allowed")
 
     task.status = data.status
 
@@ -203,11 +318,7 @@ async def update_task_status_service(
 
 
 
-async def add_task_log_service(
-    db: AsyncSession,
-    data,
-    current_user
-):
+async def add_task_log_service(db: AsyncSession,data,current_user):
 
     result = await db.execute(
         select(Task).where(
@@ -218,10 +329,7 @@ async def add_task_log_service(
     task = result.scalar_one_or_none()
 
     if not task:
-        raise HTTPException(
-            status_code=404,
-            detail="Task not found"
-        )
+        raise HTTPException(status_code=404,detail="Task not found")
 
     log = TaskLog(
 
@@ -244,11 +352,7 @@ async def add_task_log_service(
 
 
 
-async def submit_task_service(
-    db: AsyncSession,
-    task_id: int,
-    current_user
-):
+async def submit_task_service(db: AsyncSession,task_id: int,current_user):
 
     result = await db.execute(
         select(Task).where(
@@ -287,12 +391,7 @@ async def submit_task_service(
 
 
 
-async def review_task_service(
-    db: AsyncSession,
-    task_id: int,
-    data,
-    current_user
-):
+async def review_task_service(db: AsyncSession,task_id: int,data,current_user):
 
     result = await db.execute(
         select(Task).where(
@@ -306,6 +405,27 @@ async def review_task_service(
         raise HTTPException(
             status_code=404,
             detail="Task not found"
+        )
+
+    current_role = getattr(getattr(current_user, "role", None), "name", None)
+    is_assigner = task.assigned_by == current_user.id
+    is_group_leader = False
+
+    if task.group_id:
+        leader_result = await db.execute(
+            select(GroupMember).where(
+                GroupMember.group_id == task.group_id,
+                GroupMember.user_id == current_user.id,
+                GroupMember.role_in_group == "Lead",
+                GroupMember.is_active == True
+            )
+        )
+        is_group_leader = leader_result.scalar_one_or_none() is not None
+
+    if current_role not in {"Admin", "SuperAdmin"} and not is_assigner and not is_group_leader:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the task assigner, group leader, admin, or superadmin can review this task"
         )
 
     task.approval_status = data.review_status
@@ -343,11 +463,113 @@ async def review_task_service(
     }
 
 
+async def upload_task_evidence_service(db: AsyncSession,task_id: int,description: str,current_user,screenshot=None,file=None):
 
-async def get_my_tasks_service(
-    db: AsyncSession,
-    current_user
-):
+    result = await db.execute(
+        select(Task).where(Task.id == task_id)
+    )
+
+    task = result.scalar_one_or_none()
+
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found"
+        )
+
+    current_role = getattr(getattr(current_user, "role", None), "name", None)
+    is_assigner = task.assigned_by == current_user.id
+    is_assigned_employee = task.assigned_to == current_user.id
+    is_group_leader = False
+
+    if task.group_id:
+        leader_result = await db.execute(
+            select(GroupMember).where(
+                GroupMember.group_id == task.group_id,
+                GroupMember.user_id == current_user.id,
+                GroupMember.role_in_group == "Lead",
+                GroupMember.is_active == True
+            )
+        )
+        is_group_leader = leader_result.scalar_one_or_none() is not None
+
+    if current_role not in {"Admin", "SuperAdmin"} and not is_assigner and not is_group_leader and not is_assigned_employee:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the assigned employee, task assigner, group leader, admin, or superadmin can upload evidence"
+        )
+
+    screenshot_path = None
+    file_path = None
+
+    if screenshot is not None:
+        screenshot_path = await save_upload_file(screenshot, "task_evidences/screenshots")
+
+    if file is not None:
+        file_path = await save_upload_file(file, "task_evidences/files")
+
+    evidence = TaskEvidence(
+        task_id=task_id,
+        user_id=current_user.id,
+        description=description,
+        screenshot_path=screenshot_path,
+        file_path=file_path
+    )
+
+    db.add(evidence)
+    await db.commit()
+    await db.refresh(evidence)
+
+    return evidence
+
+
+async def get_task_evidence_service(db: AsyncSession, task_id: int, current_user):
+
+    task_result = await db.execute(
+        select(Task).where(Task.id == task_id)
+    )
+    task = task_result.scalar_one_or_none()
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    current_role = getattr(getattr(current_user, "role", None), "name", None)
+
+    if current_role in {"Admin", "SuperAdmin"}:
+        result = await db.execute(
+            select(TaskEvidence).where(TaskEvidence.task_id == task_id)
+        )
+        return result.scalars().all()
+
+    if task.group_id:
+        leader_result = await db.execute(
+            select(GroupMember).where(
+                GroupMember.group_id == task.group_id,
+                GroupMember.user_id == current_user.id,
+                GroupMember.role_in_group == "Lead",
+                GroupMember.is_active == True
+            )
+        )
+        if leader_result.scalar_one_or_none():
+            result = await db.execute(
+                select(TaskEvidence).where(TaskEvidence.task_id == task_id)
+            )
+            return result.scalars().all()
+
+    if task.assigned_to == current_user.id or task.assigned_by == current_user.id:
+        result = await db.execute(
+            select(TaskEvidence).where(TaskEvidence.task_id == task_id)
+        )
+        return result.scalars().all()
+
+    raise HTTPException(
+        status_code=403,
+        detail="You do not have permission to view this task evidence"
+    )
+
+
+
+async def get_my_tasks_service(db: AsyncSession,current_user):
 
     result = await db.execute(
         select(Task).where(
@@ -359,10 +581,7 @@ async def get_my_tasks_service(
 
 
 
-async def get_group_tasks_service(
-    db: AsyncSession,
-    current_user
-):
+async def get_group_tasks_service(db: AsyncSession,current_user):
 
     result = await db.execute(
         select(Task).where(
@@ -374,12 +593,51 @@ async def get_group_tasks_service(
 
 
 
+
+
+
 async def get_all_tasks_service(
-    db: AsyncSession
+    db: AsyncSession,
+    group_id: int,
+    current_user
 ):
 
-    result = await db.execute(
-        select(Task)
+
+    group_member_result = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == current_user.id
+        )
     )
 
-    return result.scalars().all() 
+    group_member = group_member_result.scalar_one_or_none()
+
+    if not group_member:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not member of this group"
+        )
+
+
+    if group_member.role_in_group == "Lead":
+
+        result = await db.execute(
+            select(Task).where(
+                Task.group_id == group_id
+            )
+        )
+
+        return result.scalars().all()
+
+
+    result = await db.execute(
+        select(Task).where(
+            Task.group_id == group_id,
+            Task.assigned_to == current_user.id
+        )
+    )
+
+    return result.scalars().all()
+
+
+

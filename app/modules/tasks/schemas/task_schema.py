@@ -37,6 +37,19 @@ class ReviewTaskSchema(BaseModel):
     comment: str
 
 
+class TaskEvidenceResponseSchema(BaseModel):
+    id: int
+    task_id: int
+    user_id: int
+    description: str
+    screenshot_path: Optional[str] = None
+    file_path: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ==========================================
 # CREATE TASK LOG
 # ==========================================
@@ -70,3 +83,17 @@ class TaskLogResponseSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Create the personal task schemas
+
+class CreatePersonalTaskSchemas(BaseModel):
+    title: str
+
+    description: str
+
+    assigned_to: int
+
+    priority: str
+
+    deadline: datetime

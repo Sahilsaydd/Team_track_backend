@@ -11,12 +11,12 @@ class GroupMemberSchema(BaseModel):
 
     role_in_group: str = Field(
         ...,
-        example="Lead"
+        example="Member"
     )
 
     note: Optional[str] = Field(
         None,
-        example="Backend Team Leader"
+        example="Backend Team Member"
     )
 
 

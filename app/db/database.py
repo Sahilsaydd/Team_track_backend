@@ -24,5 +24,6 @@ from app.modules.tasks.models.task_comment import TaskComment
 from app.modules.tasks.models.task_attachments import TaskAttachment
 
 from app.modules.tasks.models.task_review import TaskReview
+from app.modules.tasks.models.task_evidence import TaskEvidence
 
 from app.modules.notification.model.notification import Notification

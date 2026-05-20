@@ -47,6 +47,8 @@ async def create_group_service(db: AsyncSession, data, current_user):
     db.add(new_group)
     await db.flush()
 
+    leader_created = False
+
     for member in data.members:
 
         user_result = await db.execute(
@@ -70,10 +72,19 @@ async def create_group_service(db: AsyncSession, data, current_user):
                 detail=f"Only Employee users can be added to a team. User {member.user_id} is {existing_user.role.name if existing_user.role else 'unassigned'}"
             )
 
+        normalized_role = (member.role_in_group or "Member").strip().title()
+        if normalized_role == "Lead":
+            if leader_created:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only one leader is allowed in a group"
+                )
+            leader_created = True
+
         group_member = GroupMember(
             group_id=new_group.id,
             user_id=member.user_id,
-            role_in_group=member.role_in_group,
+            role_in_group=normalized_role,
             note=member.note
         )
 
@@ -144,6 +155,15 @@ async def add_member_service(
             detail="Group not found"
         )
 
+    existing_leader_result = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == data.group_id,
+            GroupMember.role_in_group == "Lead",
+            GroupMember.is_active == True
+        )
+    )
+    existing_leader = existing_leader_result.scalar_one_or_none()
+
     for member in data.members:
 
         user_result = await db.execute(
@@ -183,7 +203,7 @@ async def add_member_service(
         new_member = GroupMember(
             group_id=data.group_id,
             user_id=member.user_id,
-            role_in_group=member.role_in_group,
+            role_in_group="Member",
             note=member.note
         )
 

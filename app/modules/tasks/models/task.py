@@ -39,14 +39,14 @@ class Task(Base):
     assigned_by = Column(Integer,ForeignKey("users.id"))
 
     assigned_to = Column(Integer,ForeignKey("users.id"))
-
+    task_type = Column(String ,default="personal")
     submitted_to = Column(Integer,ForeignKey("users.id"))
 
     group_id = Column(Integer,ForeignKey("groups.id"))
 
     is_self_task = Column(Boolean,default=False)
 
-    deadline = Column(DateTime(timezone=True))
+    deadline = Column(DateTime(timezone=True), nullable=False)
 
     created_at = Column(DateTime(timezone=True),server_default=func.now())
 
