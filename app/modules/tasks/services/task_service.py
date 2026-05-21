@@ -77,7 +77,7 @@ async def create_task_service(db: AsyncSession,data,current_user):
         description=data.description,
 
         priority=data.priority,
-
+        task_type="Group",
         deadline=data.deadline,
 
         group_id=data.group_id,
@@ -100,7 +100,7 @@ async def create_task_service(db: AsyncSession,data,current_user):
 
         user_id=data.assigned_to,
 
-        title="New Task Assigned",
+        title="New Group Task Assigned",
 
         message=f"You received task '{task.title}'",
 
@@ -198,7 +198,7 @@ async def create_hierarchy_task_service(db: AsyncSession,data,current_user):
         priority=data.priority,
 
         deadline=data.deadline,
-        task_type="personal",
+        task_type="Personal",
         group_id=None,
         created_by=current_user.id,
         assigned_by=current_user.id,
@@ -213,7 +213,7 @@ async def create_hierarchy_task_service(db: AsyncSession,data,current_user):
 
         user_id=assigned_user.id,
 
-        title="New Task Assigned",
+        title="New Personal Task Assigned",
 
         message=f"You received task '{task.title}'",
 
@@ -572,9 +572,12 @@ async def get_task_evidence_service(db: AsyncSession, task_id: int, current_user
 async def get_my_tasks_service(db: AsyncSession,current_user):
 
     result = await db.execute(
-        select(Task).where(
-            Task.assigned_to == current_user.id
+        select(Task)
+        .where(
+            Task.assigned_to == current_user.id,
+            Task.is_active == True
         )
+        .order_by(Task.created_at.desc(), Task.id.desc())
     )
 
     return result.scalars().all()
@@ -584,9 +587,13 @@ async def get_my_tasks_service(db: AsyncSession,current_user):
 async def get_group_tasks_service(db: AsyncSession,current_user):
 
     result = await db.execute(
-        select(Task).where(
-            Task.submitted_to == current_user.id
+        select(Task)
+        .where(
+            Task.submitted_to == current_user.id,
+            Task.task_type == "Group",
+            Task.is_active == True
         )
+        .order_by(Task.created_at.desc(), Task.id.desc())
     )
 
     return result.scalars().all()
@@ -622,22 +629,95 @@ async def get_all_tasks_service(
     if group_member.role_in_group == "Lead":
 
         result = await db.execute(
-            select(Task).where(
-                Task.group_id == group_id
+            select(Task)
+            .where(
+                Task.group_id == group_id,
+                Task.is_active == True
             )
+            .order_by(Task.created_at.desc(), Task.id.desc())
         )
 
         return result.scalars().all()
 
 
     result = await db.execute(
-        select(Task).where(
+        select(Task)
+        .where(
             Task.group_id == group_id,
-            Task.assigned_to == current_user.id
+            Task.assigned_to == current_user.id,
+            Task.is_active == True
         )
+        .order_by(Task.created_at.desc(), Task.id.desc())
     )
 
     return result.scalars().all()
 
 
+
+async def get_employee_task_review(employee_id ,db:AsyncSession):
+    result = await db.execute(
+        select(TaskReview)
+        .join(Task, Task.id == TaskReview.task_id)
+        .where(Task.assigned_to == employee_id)
+        .order_by(TaskReview.created_at.desc(), TaskReview.id.desc())
+    )
+    review = result.scalars().unique().all()
+
+    if not review:
+        raise HTTPException(status_code=404 , detail="No task Reviews found for this employee")
+    
+    return review
+
+
+async def soft_delete_group_task_service(
+    db: AsyncSession,
+    task_id: int,
+    current_user
+):
+
+    task_result = await db.execute(
+        select(Task).where(
+            Task.id == task_id,
+            Task.is_active == True
+        )
+    )
+    task = task_result.scalar_one_or_none()
+
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found"
+        )
+
+    if not task.group_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Only group tasks can be soft deleted by a group leader"
+        )
+
+    leader_result = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == task.group_id,
+            GroupMember.user_id == current_user.id,
+            GroupMember.role_in_group == "Lead",
+            GroupMember.is_active == True
+        )
+    )
+    leader = leader_result.scalar_one_or_none()
+
+    if not leader:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the group leader of this task can soft delete it"
+        )
+
+    task.is_active = False
+
+    await db.commit()
+
+    return {
+        "message": "Task soft deleted successfully",
+        "task_id": task.id,
+        "is_active": task.is_active
+    }
 

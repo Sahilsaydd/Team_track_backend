@@ -46,6 +46,8 @@ class Task(Base):
 
     is_self_task = Column(Boolean,default=False)
 
+    is_active = Column(Boolean, default=True, nullable=False, server_default=func.true())
+
     deadline = Column(DateTime(timezone=True), nullable=False)
 
     created_at = Column(DateTime(timezone=True),server_default=func.now())

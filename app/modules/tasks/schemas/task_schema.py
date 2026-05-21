@@ -50,9 +50,6 @@ class TaskEvidenceResponseSchema(BaseModel):
         from_attributes = True
 
 
-# ==========================================
-# CREATE TASK LOG
-# ==========================================
 
 class TaskLogSchema(BaseModel):
 
@@ -63,9 +60,6 @@ class TaskLogSchema(BaseModel):
     hours_spent: float
 
 
-# ==========================================
-# RESPONSE TASK LOG
-# ==========================================
 
 class TaskLogResponseSchema(BaseModel):
 
@@ -81,11 +75,9 @@ class TaskLogResponseSchema(BaseModel):
 
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
 
-# Create the personal task schemas
+
 
 class CreatePersonalTaskSchemas(BaseModel):
     title: str
@@ -97,3 +89,16 @@ class CreatePersonalTaskSchemas(BaseModel):
     priority: str
 
     deadline: datetime
+
+
+
+class TaskReviewResponse(BaseModel):
+    id:int
+    task_id:int
+    reviewed_by:int
+    reviewed_status:str
+    comment:str | None
+    created_at:datetime
+
+    class Config:
+        from_attributes = True

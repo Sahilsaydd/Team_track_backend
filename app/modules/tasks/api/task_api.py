@@ -16,7 +16,8 @@ from app.modules.tasks.schemas.task_schema import (
     TaskLogSchema,
     TaskLogResponseSchema,
     TaskEvidenceResponseSchema,
-    CreatePersonalTaskSchemas
+    CreatePersonalTaskSchemas,
+    TaskReviewResponse
 
 )
 
@@ -32,7 +33,9 @@ from app.modules.tasks.services.task_service import (
     get_my_tasks_service,
     get_group_tasks_service,
     get_all_tasks_service,
-    create_hierarchy_task_service
+    create_hierarchy_task_service,
+    get_employee_task_review,
+    soft_delete_group_task_service
 )
 
 router = APIRouter(
@@ -134,6 +137,19 @@ async def review_task_api(
     )
 
 
+@router.delete("/{task_id}/soft-delete")
+async def soft_delete_group_task_api(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    return await soft_delete_group_task_service(
+        db,
+        task_id,
+        current_user
+    )
+
+
 @router.post("/{task_id}/evidence")
 async def upload_task_evidence_api(
     task_id: int,
@@ -165,6 +181,10 @@ async def get_task_evidence_api(
         current_user
     )
 
+
+@router.get("/employee/{user_id}" ,response_model=list[TaskReviewResponse])
+async def get_employee_task_review_service(user_id:int , db:AsyncSession =Depends(get_db)):
+    return await get_employee_task_review(user_id,db)
 
 
 @router.get("/my")
