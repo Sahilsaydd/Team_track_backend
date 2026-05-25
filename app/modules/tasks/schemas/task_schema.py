@@ -75,6 +75,9 @@ class TaskLogResponseSchema(BaseModel):
 
     created_at: datetime
 
+    class Config:
+        from_attributes = True
+
 
 
 
@@ -102,3 +105,9 @@ class TaskReviewResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TaskReportExportResponse(BaseModel):
+    message: str
+    file_name: str
+    file_path: str

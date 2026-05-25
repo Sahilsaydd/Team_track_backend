@@ -4,6 +4,7 @@ from sqlalchemy import String
 from sqlalchemy import Text
 from sqlalchemy import DateTime
 from sqlalchemy import Boolean
+from sqlalchemy import Float
 from sqlalchemy.sql import func
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import relationship
@@ -51,5 +52,54 @@ class Task(Base):
     deadline = Column(DateTime(timezone=True), nullable=False)
 
     created_at = Column(DateTime(timezone=True),server_default=func.now())
+     # =========================
+    # NEW FIELDS
+    # =========================
+
+    project_name = Column(
+        String,
+        nullable=True
+    )
+
+    worked_hours = Column(
+        Float,
+        default=0
+    )
+
+    is_recurring = Column(
+        Boolean,
+        default=False
+    )
+
+    recurring_type = Column(
+        String,
+        nullable=True
+    )
+
+    last_activity_at = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    reminder_sent = Column(
+        Boolean,
+        default=False
+    )
+
+    completed_at = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    blocked_at = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    overdue_at = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
 
     group = relationship("Group")

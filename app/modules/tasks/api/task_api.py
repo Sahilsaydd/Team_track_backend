@@ -2,6 +2,7 @@
 from fastapi import APIRouter
 from fastapi import Depends, File, Form, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
 
 
 from app.deps.db import get_db
@@ -17,7 +18,8 @@ from app.modules.tasks.schemas.task_schema import (
     TaskLogResponseSchema,
     TaskEvidenceResponseSchema,
     CreatePersonalTaskSchemas,
-    TaskReviewResponse
+    TaskReviewResponse,
+    TaskReportExportResponse
 
 )
 
@@ -36,6 +38,8 @@ from app.modules.tasks.services.task_service import (
     create_hierarchy_task_service,
     get_employee_task_review,
     soft_delete_group_task_service
+    ,
+    export_task_report_service
 )
 
 router = APIRouter(
@@ -91,12 +95,12 @@ async def update_task_status_api(
 
 
 
-@router.post("/logs")
+@router.post("/logs", response_model=TaskLogResponseSchema)
 async def add_task_log_api(
     data: TaskLogSchema,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user)
-):
+    ) -> TaskLogResponseSchema:
 
     return await add_task_log_service(
         db,
@@ -217,3 +221,35 @@ async def get_group_tasks_api(
 async def get_all_tasks_api(group_id:int ,db: AsyncSession = Depends(get_db),current_user =Depends(get_current_user)):
 
     return await get_all_tasks_service(db,group_id,current_user)
+
+
+@router.get(
+    "/report/export",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                    "schema": {
+                        "type": "string",
+                        "format": "binary"
+                    }
+                }
+            },
+            "description": "Excel report file"
+        }
+    }
+)
+async def export_task_report_api(
+    report_type: str,
+    selected_date: datetime | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    return await export_task_report_service(
+        db,
+        current_user,
+        report_type,
+        selected_date
+    )
+
+

@@ -2,12 +2,15 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
+from fastapi.responses import FileResponse
 from app.modules.groups.models.group_member import GroupMember
 from app.modules.tasks.models.task import Task
 from app.modules.tasks.models.task_review import TaskReview
 from app.modules.tasks.models.task_log import TaskLog
 from app.modules.tasks.models.task_evidence import TaskEvidence
-
+import os
+import csv
+from datetime import datetime, timedelta
 from app.modules.notification.model.notification import (
     Notification
 )
@@ -721,3 +724,123 @@ async def soft_delete_group_task_service(
         "is_active": task.is_active
     }
 
+async def export_task_report_service(db: AsyncSession,current_user,report_type: str,selected_date: datetime = None):
+
+    now = datetime.utcnow()
+
+    if report_type == "daily":
+
+        start_date = now.replace(hour=0, minute=0, second=0)
+
+    elif report_type == "weekly":
+
+        start_date = now - timedelta(days=7)
+
+    elif report_type == "monthly":
+
+        start_date = now - timedelta(days=30)
+
+    elif report_type == "yearly":
+
+        start_date = now - timedelta(days=365)
+
+    else:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid report type"
+        )
+
+    if selected_date:
+
+        start_date = selected_date.replace(
+            hour=0,
+            minute=0,
+            second=0
+        )
+
+        end_date = selected_date.replace(
+            hour=23,
+            minute=59,
+            second=59
+        )
+
+        result = await db.execute(
+            select(TaskLog, Task)
+            .join(Task, Task.id == TaskLog.task_id)
+            .where(
+                TaskLog.user_id == current_user.id,
+                TaskLog.created_at >= start_date,
+                TaskLog.created_at <= end_date
+            )
+        )
+
+    else:
+
+        result = await db.execute(
+            select(TaskLog, Task)
+            .join(Task, Task.id == TaskLog.task_id)
+            .where(
+                TaskLog.user_id == current_user.id,
+                TaskLog.created_at >= start_date
+            )
+        )
+
+    logs = result.all()
+
+    if not logs:
+
+        raise HTTPException(
+            status_code=404,
+            detail="No logs found"
+        )
+
+    report_data = []
+    monthly_extra_hours = 0
+    monthly_leaves = 0
+
+    for log, task in logs:
+        worked_hours = float(log.hours_spent or 0)
+        worked_days = 1 if worked_hours > 0 else 0
+        extra_hours = max(worked_hours - 8, 0)
+        monthly_extra_hours += extra_hours
+
+        report_data.append({
+            "Day": log.created_at.strftime("%A"),
+            "Date / Month": log.created_at.strftime("%m/%d/%Y"),
+            "Task/Work Details (If Any)": log.work_note,
+            "Project Name": task.project_name or "N/A",
+            "Actual Worked Days": worked_days,
+            "Actual Worked Hours": worked_hours,
+            "Extra Hours Worked in the Month": extra_hours,
+            "No. Of leaves taken (Half Day = 0.5) (One Day = 1)": 0
+        })
+
+    reports_dir = os.path.join("uploads", "reports")
+
+    os.makedirs(reports_dir, exist_ok=True)
+
+    file_name = f"{report_type}_report_{current_user.id}.csv"
+
+    file_path = os.path.join(reports_dir, file_name)
+
+    headers = list(report_data[0].keys())
+    with open(file_path, "w", newline="", encoding="utf-8") as report_file:
+        writer = csv.DictWriter(report_file, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(report_data)
+        writer.writerow({})
+        writer.writerow({
+            "Task/Work Details (If Any)": "Extra Hours Worked in the Month",
+            "Actual Worked Hours": monthly_extra_hours,
+        })
+        writer.writerow({
+            "Task/Work Details (If Any)": "No. Of leaves taken",
+            "Actual Worked Hours": monthly_leaves,
+        })
+
+    return FileResponse(
+        path=file_path,
+        filename=file_name,
+        media_type="text/csv"
+    )   

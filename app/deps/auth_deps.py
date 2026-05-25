@@ -7,18 +7,23 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.modules.users.models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from fastapi import Cookie
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/auth/login"
 )
 
+# Read the token from the cookie and get the current user
 
-async def get_current_user(token:str = Depends(oauth2_scheme),db:AsyncSession = Depends(get_db)):
+async def get_current_user(token: str = Cookie(None), db: AsyncSession = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=401, detail="Invalid Token"
     )
-
+    if not token:
+        raise credentials_exception
+    
+    
+    
     try:
         payload = jwt.decode(
             token,
