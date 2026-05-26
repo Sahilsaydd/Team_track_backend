@@ -9,7 +9,7 @@ from app.modules.users.services.user_service import ( create_admin_service , cre
 router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.post("/create_admin")
-async def create_Admin(data:UserSchema , db:AsyncSession=Depends(get_db) , current_user = Depends(get_current_user)):
+async def create_Admin(data:UserSchema , db:AsyncSession=Depends(get_db) , current_user = Depends(require_role(["SuperAdmin"]))):
     return await create_admin_service(db,data,current_user)
 
 @router.post("/create-employee")
@@ -27,7 +27,7 @@ async def create_employee(
 
 
 @router.get("/all_employees",response_model=List[UserResponseSchema])
-async def get_all_employees( db:AsyncSession=Depends(get_db),current_user = Depends(require_role([ "SuperAdmin"]))):
+async def get_all_employees( db:AsyncSession=Depends(get_db),current_user = Depends(require_role([ "SuperAdmin","Admin"]))):
     return await get_all_employees_service(db)
 
 

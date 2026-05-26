@@ -38,25 +38,20 @@ async def login_service(db: AsyncSession,data,response: Response):
 
 
     response.set_cookie(
-
-        key="access_token",
-
-        value=token,
-
-        httponly=True,
-
-
-        samesite="lax",
-
-        max_age=60 * 60 * 24
-
-    )
+    key="access_token",
+    value=token,
+    httponly=True,
+    secure=False,
+    samesite="lax",
+    path="/",
+    max_age=60 * 60 * 24
+)
 
 
     return {
 
         "message": "Login Successful",
-
+        "access_token": token,
         "role": user.role.name,
 
         "user": {
@@ -71,4 +66,19 @@ async def login_service(db: AsyncSession,data,response: Response):
 
         }
 
+    }
+
+# Logout service
+async def logout_service(response: Response):
+
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        path="/",
+        secure=False,
+        samesite="lax"
+    )
+
+    return {
+        "message": "Logout successful"
     }
