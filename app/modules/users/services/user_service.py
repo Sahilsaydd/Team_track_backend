@@ -109,7 +109,6 @@ async def get_all_users_service(db: AsyncSession):
     result = await db.execute(
         select(User)
         .options(joinedload(User.role))
-        .where(User.is_active == True)
     )
 
     users = result.scalars().all()

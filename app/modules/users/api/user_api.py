@@ -36,7 +36,7 @@ async def get_all_admin(db:AsyncSession=Depends(get_db),current_user = Depends(r
     return await get_all_admins(db)
 
 @router.get("/")
-async def get_all_users(db: AsyncSession = Depends(get_db),current_user = Depends(require_role(["Admin", "SuperAdmin"]))):
+async def get_all_users(db: AsyncSession = Depends(get_db),current_user = Depends(require_role([ "SuperAdmin"]))):
     return await get_all_users_service(db)
 
 
