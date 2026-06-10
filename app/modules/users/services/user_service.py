@@ -71,7 +71,7 @@ async def create_employee_service(db:AsyncSession,data,current_user):
 
 
 async def get_all_employees_service(db:AsyncSession):
-    result = await db.execute(select(User).options(joinedload(User.role)).join(Role).where(Role.name=="Employee",User.is_active==True))
+    result = await db.execute(select(User).options(joinedload(User.role)).join(Role).where(Role.name=="Employee").order_by(User.created_at.desc()))
 
     employees =  result.scalars().all()
     return [
@@ -109,6 +109,7 @@ async def get_all_users_service(db: AsyncSession):
     result = await db.execute(
         select(User)
         .options(joinedload(User.role))
+        .order_by(User.created_at.desc())
     )
 
     users = result.scalars().all()

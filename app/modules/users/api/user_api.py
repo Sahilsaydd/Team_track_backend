@@ -12,7 +12,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 async def create_Admin(data:UserSchema , db:AsyncSession=Depends(get_db) , current_user = Depends(require_role(["SuperAdmin"]))):
     return await create_admin_service(db,data,current_user)
 
-@router.post("/create-employee")
+@router.post("/create_employee")
 async def create_employee(
     data: CreateEmployeeSchema,
     db: AsyncSession = Depends(get_db),
@@ -52,3 +52,4 @@ async def all_deactivated_users(db:AsyncSession = Depends(get_db) , current_user
 @router.put("/activate/{user_id}")
 async def activate_user(user_id:int , db:AsyncSession=Depends(get_db), current_user = Depends(require_role(["Admin", "SuperAdmin"]))):
     return await activate_user_again(user_id,db)
+

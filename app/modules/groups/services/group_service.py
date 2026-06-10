@@ -100,7 +100,7 @@ async def create_group_service(db: AsyncSession, data, current_user):
         "profile_pic": new_group.profile_pic
     }
 
-
+    
 
 async def get_all_groups_service(
     db: AsyncSession
