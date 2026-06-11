@@ -106,11 +106,7 @@ async def get_all_groups_service(
     db: AsyncSession
 ):
 
-    result = await db.execute(
-        select(Group).where(
-            Group.is_active == True
-        )
-    )
+    result = await db.execute(select(Group).where(Group.is_active == True).order_by(Group.created_at.desc()))
 
     groups = result.scalars().all()
 
