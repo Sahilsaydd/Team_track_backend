@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends,status
 
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,7 @@ from app.modules.groups.services.group_service import (
 router = APIRouter(prefix="/groups",tags=["Groups"],dependencies=[Depends(require_role(["Admin", "SuperAdmin"]))])
 
 
-@router.post("/create")
+@router.post("/create",status_code=status.HTTP_201_CREATED)
 async def create_group(data: CreateGroupSchema,db: AsyncSession = Depends(get_db),current_user = Depends(require_role(["Admin", "SuperAdmin"]))):
     return await create_group_service(db, data, current_user)
 

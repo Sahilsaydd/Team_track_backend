@@ -1,4 +1,4 @@
-from fastapi import APIRouter ,Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.deps.db import get_db
 from typing import List
@@ -8,15 +8,12 @@ from app.modules.users.services.user_service import ( create_admin_service , cre
     ,get_all_employees_service,get_all_admins ,get_all_users_service, deactivate_user_service,deactivated_users ,activate_user_again)
 router = APIRouter(prefix="/users", tags=["Users"])
 
-@router.post("/create_admin")
+@router.post("/create_admin",status_code=status.HTTP_201_CREATED)
 async def create_Admin(data:UserSchema , db:AsyncSession=Depends(get_db) , current_user = Depends(require_role(["SuperAdmin"]))):
     return await create_admin_service(db,data,current_user)
 
-@router.post("/create_employee")
-async def create_employee(
-    data: CreateEmployeeSchema,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(require_role(["SuperAdmin" , "Admin"]))
+@router.post("/create_employee",status_code=status.HTTP_201_CREATED)
+async def create_employee(data: CreateEmployeeSchema,db: AsyncSession = Depends(get_db),current_user = Depends(require_role(["SuperAdmin" , "Admin"]))
 ):
 
     return await create_employee_service(

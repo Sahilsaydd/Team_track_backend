@@ -346,7 +346,7 @@ async def get_group_members_service(
     db: AsyncSession,
     group_id: int
 ):
-
+    
     result = await db.execute(
         select(GroupMember).where(
             GroupMember.group_id == group_id,
