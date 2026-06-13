@@ -42,10 +42,7 @@ from app.modules.tasks.services.task_service import (
     export_task_report_service
 )
 
-router = APIRouter(
-    prefix="/tasks",
-    tags=["Tasks"]
-)
+router = APIRouter(prefix="/tasks",tags=["Tasks"])
 
 
 

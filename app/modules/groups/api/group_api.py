@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends,status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps.db import get_db
+from app.deps.auth_deps import get_current_user
 
 from app.deps.auth_deps import require_role
 
@@ -23,9 +24,10 @@ from app.modules.groups.services.group_service import (
     get_group_members_service,
     get_single_group_service,
     remove_member_service,
+    get_My_Group
 )
 
-router = APIRouter(prefix="/groups",tags=["Groups"],dependencies=[Depends(require_role(["Admin", "SuperAdmin"]))])
+router = APIRouter(prefix="/groups",tags=["Groups"])
 
 
 @router.post("/create",status_code=status.HTTP_201_CREATED)
@@ -34,14 +36,19 @@ async def create_group(data: CreateGroupSchema,db: AsyncSession = Depends(get_db
 
 
 @router.get("/")
-async def get_all_groups(db: AsyncSession = Depends(get_db)):
+async def get_all_groups(db: AsyncSession = Depends(get_db) ,current_user = Depends(require_role(["Admin", "SuperAdmin"]))):
     return await get_all_groups_service(db)
+
+@router.get("/my_groups")
+async def get_my_groups(db:AsyncSession=Depends(get_db),current_user = Depends(get_current_user)):
+    return await get_My_Group(db,current_user)
 
 
 @router.get("/created-by/{creator_id}")
 async def get_groups_by_creator(
     creator_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(require_role(["Admin", "SuperAdmin"]))
 ):
     return await get_groups_by_creator_service(db, creator_id)
 
@@ -57,20 +64,20 @@ async def get_group_members(group_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/members/add")
-async def add_members(data: AddMemberSchema,db: AsyncSession = Depends(get_db)):
+async def add_members(data: AddMemberSchema,db: AsyncSession = Depends(get_db), current_user = Depends(require_role(["Admin", "SuperAdmin"]))):
     return await add_member_service(db, data)
 
 
 @router.delete("/members/remove")
-async def remove_member(data: RemoveMemberSchema,db: AsyncSession = Depends(get_db)):
+async def remove_member(data: RemoveMemberSchema,db: AsyncSession = Depends(get_db), current_user = Depends(require_role(["Admin", "SuperAdmin"]))):
     return await remove_member_service(db, data)
 
 
 @router.patch("/leader/change")
-async def change_leader(data: ChangeLeaderSchema,db: AsyncSession = Depends(get_db)):
+async def change_leader(data: ChangeLeaderSchema,db: AsyncSession = Depends(get_db), current_user = Depends(require_role(["Admin", "SuperAdmin"]))):
     return await change_group_leader_service(db, data)
 
 
 @router.delete("/{group_id}")
-async def deactivate_group(group_id: int,db: AsyncSession = Depends(get_db)):
+async def deactivate_group(group_id: int,db: AsyncSession = Depends(get_db), current_user = Depends(require_role(["Admin", "SuperAdmin"]))):
     return await deactivate_group_service(db, group_id)

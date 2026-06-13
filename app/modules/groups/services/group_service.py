@@ -113,6 +113,24 @@ async def get_all_groups_service(
     return groups
 
 
+async def get_My_Group(db:AsyncSession ,current_user):
+    result = await db.execute(
+        select(Group)
+        .join(
+            GroupMember,
+            Group.id == GroupMember.group_id
+        )
+        .where(
+            GroupMember.user_id == current_user.id,
+            GroupMember.is_active == True,
+            Group.is_active == True
+        )
+        .order_by(Group.created_at.desc())
+    )
+
+    return result.scalars().all()
+    
+
 async def get_groups_by_creator_service(
     db: AsyncSession,
     creator_id: int
@@ -342,18 +360,60 @@ async def get_single_group_service(
 
 
 
+
 async def get_group_members_service(
     db: AsyncSession,
     group_id: int
 ):
-    
+
     result = await db.execute(
-        select(GroupMember).where(
+        select(
+            GroupMember.id,
+            GroupMember.role_in_group,
+            GroupMember.is_active,
+            GroupMember.note,
+            GroupMember.group_id,
+            GroupMember.user_id,
+            GroupMember.created_at,
+
+            User.email,
+            User.username
+        )
+        .join(
+            User,
+            User.id == GroupMember.user_id
+        )
+        .where(
             GroupMember.group_id == group_id,
             GroupMember.is_active == True
         )
     )
 
-    members = result.scalars().all()
+    members = result.mappings().all()
 
-    return members
+    # fetch leader details separately (if any)
+    leader_result = await db.execute(
+        select(
+            GroupMember.id,
+            GroupMember.role_in_group,
+            GroupMember.note,
+            GroupMember.group_id,
+            GroupMember.user_id,
+            GroupMember.created_at,
+            User.email,
+            User.username
+        )
+        .join(User, User.id == GroupMember.user_id)
+        .where(
+            GroupMember.group_id == group_id,
+            GroupMember.role_in_group == "Lead",
+            GroupMember.is_active == True
+        )
+    )
+
+    leader = leader_result.mappings().first()
+
+    return {
+        "members": members,
+        "leader": leader
+    }
