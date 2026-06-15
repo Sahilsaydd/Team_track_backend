@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from fastapi import HTTPException
+from fastapi import HTTPException ,UploadFile
 from datetime import datetime
 from random import randint
 
@@ -106,7 +106,7 @@ async def get_all_groups_service(
     db: AsyncSession
 ):
 
-    result = await db.execute(select(Group).where(Group.is_active == True).order_by(Group.created_at.desc()))
+    result = await db.execute(select(Group).order_by(Group.created_at.desc()))
 
     groups = result.scalars().all()
 
@@ -306,10 +306,7 @@ async def change_group_leader_service(
 
 
 
-async def deactivate_group_service(
-    db: AsyncSession,
-    group_id: int
-):
+async def deactivate_group_service(db: AsyncSession,group_id: int):
 
     result = await db.execute(
         select(Group).where(
@@ -333,6 +330,32 @@ async def deactivate_group_service(
     return {
         "message": "Group deactivated successfully"
     }
+
+async def activate_group_service(db:AsyncSession, group_id:int):
+    result = await db.execute(
+        select(Group).where(
+            Group.id == group_id,
+            Group.is_active == False
+        )
+    )
+    group = result.scalar_one_or_none()
+
+    if not group:
+        raise HTTPException(
+            status_code=404,
+            detail="Group not found"
+        )
+
+    group.is_active =True
+
+    await db.commit()
+    return {
+        "Massage":"Group Activated Successfully"
+    }
+
+
+
+
 
 
 
@@ -417,3 +440,76 @@ async def get_group_members_service(
         "members": members,
         "leader": leader
     }
+
+async def update_group_service(
+    db: AsyncSession,
+    group_id: int,
+    data
+):
+
+    result = await db.execute(
+        select(Group).where(Group.id == group_id)
+    )
+
+    group = result.scalar_one_or_none()
+
+    if not group:
+        raise HTTPException(
+            status_code=404,
+            detail="Group not found"
+        )
+
+    # Name validation
+    if len(data.name.strip()) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Group name must be at least 3 characters"
+        )
+
+    # Description validation
+    if len(data.description.strip()) < 5:
+        raise HTTPException(
+            status_code=400,
+            detail="Description must be at least 5 characters"
+        )
+
+    # Duplicate name check
+    duplicate = await db.execute(
+        select(Group).where(
+            Group.name == data.name,
+            Group.id != group_id
+        )
+    )
+
+    if duplicate.scalar_one_or_none():
+        raise HTTPException(
+            status_code=400,
+            detail="Group name already exists"
+        )
+
+    # Update image only if new image received
+    if data.profile_pic:
+        group.profile_pic = save_base64_file(
+            data.profile_pic,
+            "groups"
+        )
+
+    group.name = data.name
+    group.description = data.description
+    group.is_active = data.is_active
+
+    await db.commit()
+    await db.refresh(group)
+
+    return {
+        "message": "Group updated successfully",
+        "group": {
+            "id": group.id,
+            "name": group.name,
+            "description": group.description,
+            "group_code": group.group_code,
+            "profile_pic": group.profile_pic,
+            "is_active": group.is_active
+        }
+    }
+
