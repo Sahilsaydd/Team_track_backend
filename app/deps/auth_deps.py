@@ -1,61 +1,46 @@
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from app.core.config import settings
-from app.deps.db import get_db
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from app.modules.users.models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError
 
+from app.core.config import settings
+from app.deps.db import get_db
+from app.modules.users.models.user import User
+
 security = HTTPBearer(auto_error=False)
 
-# Read the token from the cookie and get the current user
 
 async def get_current_user(
-    request: Request,
     db: AsyncSession = Depends(get_db),
     token: HTTPAuthorizationCredentials = Depends(security)
 ):
     credentials_exception = HTTPException(
-        status_code=401, detail="Invalid Token"
+        status_code=401,
+        detail="Invalid Token"
     )
-    
-    access_token = None
-    if token:
-        access_token = token.credentials
 
-    # Prioritize Authorization header (tab-scoped) over cookies (browser-wide)
-    if not access_token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            access_token = auth_header.removeprefix("Bearer ").strip()
-
-    if not access_token:
-        access_token = request.cookies.get("access_token")
-
-    if not access_token:
+    if not token:
         raise credentials_exception
-    
-    
-    
-    try:
-        if access_token.startswith("Bearer "):
-            access_token = access_token.removeprefix("Bearer ").strip()
 
+    access_token = token.credentials
+
+    try:
         payload = jwt.decode(
             access_token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM]
         )
-        print(payload)
+
         user_id = payload.get("sub")
-        if not user_id :
+
+        if not user_id:
             raise credentials_exception
-    
+
     except JWTError:
         raise credentials_exception
-    
+
     result = await db.execute(
         select(User)
         .options(selectinload(User.role))
@@ -66,7 +51,7 @@ async def get_current_user(
 
     if not user:
         raise credentials_exception
-    
+
     return user
 
 
@@ -77,10 +62,9 @@ def require_role(allowed_role: list):
     ):
 
         if current_user.role.name not in allowed_role:
-
             raise HTTPException(
                 status_code=403,
-                detail="You don't have permission to access this resource Only {} can access".format(", ".join(allowed_role))
+                detail=f"You don't have permission to access this resource. Only {', '.join(allowed_role)} can access."
             )
 
         return current_user

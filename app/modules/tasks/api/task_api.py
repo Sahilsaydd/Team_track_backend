@@ -201,15 +201,16 @@ async def get_my_tasks_api(
 
 
 
-@router.get("/group")
+@router.get("/group/{group_id}")
 async def get_group_tasks_api(
+    group_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user)
 ):
-
     return await get_group_tasks_service(
         db,
-        current_user
+        current_user,
+        group_id
     )
 
 

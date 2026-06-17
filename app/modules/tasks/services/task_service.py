@@ -1,6 +1,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 from fastapi import HTTPException, status
 from fastapi.responses import FileResponse
 from app.modules.groups.models.group_member import GroupMember
@@ -27,6 +28,9 @@ from app.modules.tasks.enums import (
 
 async def create_task_service(db: AsyncSession,data,current_user):
 
+
+    print("Current User id : ",current_user.id)
+    print("Group Id :",data.group_id)
 
     leader_result = await db.execute(
         select(GroupMember).where(
@@ -587,22 +591,57 @@ async def get_my_tasks_service(db: AsyncSession,current_user):
 
 
 
-async def get_group_tasks_service(db: AsyncSession,current_user):
+async def get_group_tasks_service(
+    db: AsyncSession,
+    current_user,
+    group_id: int
+):
+
+    AssignedByUser = aliased(User)
+    AssignedToUser = aliased(User)
 
     result = await db.execute(
-        select(Task)
-        .where(
-            Task.submitted_to == current_user.id,
-            Task.task_type == "Group",
-            Task.is_active == True
+        select(
+            Task,
+            AssignedByUser.username.label("assigned_by_name"),
+            AssignedToUser.username.label("assigned_to_name")
         )
-        .order_by(Task.created_at.desc(), Task.id.desc())
+        .outerjoin(
+            AssignedByUser,
+            Task.assigned_by == AssignedByUser.id
+        )
+        .outerjoin(
+            AssignedToUser,
+            Task.assigned_to == AssignedToUser.id
+        )
+        .where(
+    Task.group_id == group_id,
+    Task.task_type == "Group",
+    Task.is_active == True
+)
+        .order_by(
+            Task.created_at.desc(),
+            Task.id.desc()
+        )
     )
 
-    return result.scalars().all()
+    rows = result.all()
 
+    response = []
 
+    for task, assigned_by_name, assigned_to_name in rows:
 
+        task_data = {
+            column.name: getattr(task, column.name)
+            for column in Task.__table__.columns
+        }
+
+        task_data["assigned_by_name"] = assigned_by_name
+        task_data["assigned_to_name"] = assigned_to_name
+
+        response.append(task_data)
+
+    return response
 
 
 

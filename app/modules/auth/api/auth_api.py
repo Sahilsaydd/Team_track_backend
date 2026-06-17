@@ -12,12 +12,13 @@ router = APIRouter(prefix='/auth' , tags=['auth'])
 @router.post("/login")
 async def login(
     data: LoginSchema,
-    response: Response,
     db: AsyncSession = Depends(get_db)
 ):
-    return await login_service(db, data, response)
-
+    return await login_service(
+        db,
+        data
+    )
 
 @router.post("/logout")
-async def logout(response:Response):
-    return await logout_service(response)
+async def logout():
+    return await logout_service()
