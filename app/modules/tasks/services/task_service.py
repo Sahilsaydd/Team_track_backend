@@ -233,6 +233,18 @@ async def create_hierarchy_task_service(db: AsyncSession,data,current_user):
 
     await db.refresh(task)
 
+    # fetch assigned_by and assigned_to user records for names
+    assigned_by_user = None
+    assigned_to_user = None
+
+    if task.assigned_by:
+        assigned_by_result = await db.execute(select(User).where(User.id == task.assigned_by))
+        assigned_by_user = assigned_by_result.scalar_one_or_none()
+
+    if task.assigned_to:
+        assigned_to_result = await db.execute(select(User).where(User.id == task.assigned_to))
+        assigned_to_user = assigned_to_result.scalar_one_or_none()
+
     return {
         "message": "Task assigned successfully",
         "task": {
@@ -694,6 +706,63 @@ async def get_all_tasks_service(
 
     return result.scalars().all()
 
+
+
+async def get_task_by_id_service(db,task_id:int,current_user):
+    result = await db.execute(select(Task).where(Task.id==task_id,Task.is_active==True))
+    task = result.scalar_one_or_none()
+
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found"
+        )
+
+    # Allow only:
+    # 1. Assigned Employee
+    # 2. Task Creator / Group Leader
+    # 3. Admin / SuperAdmin
+
+    if (
+        current_user.role not in ["Admin", "SuperAdmin"]
+        and task.assigned_to != current_user.id
+        and task.assigned_by != current_user.id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You are not authorized to view this task"
+        )
+
+    # fetch assigned_by and assigned_to user records for names
+    assigned_by_user = None
+    assigned_to_user = None
+
+    if task.assigned_by:
+        assigned_by_result = await db.execute(select(User).where(User.id == task.assigned_by))
+        assigned_by_user = assigned_by_result.scalar_one_or_none()
+
+    if task.assigned_to:
+        assigned_to_result = await db.execute(select(User).where(User.id == task.assigned_to))
+        assigned_to_user = assigned_to_result.scalar_one_or_none()
+
+    return {
+        "id": task.id,
+        "title": task.title,
+        "description": task.description,
+        "status": task.status,
+        "approval_status": task.approval_status,
+        "priority": task.priority,
+        "created_by": task.created_by,
+        "assigned_by": task.assigned_by,
+        "assigned_to": task.assigned_to,
+        "task_type": task.task_type,
+        "submitted_to": task.submitted_to,
+        "group_id": task.group_id,
+        "deadline": task.deadline,
+        "created_at": task.created_at,
+        "assigned_by_name": assigned_by_user.username if assigned_by_user else None,
+        "assigned_to_name": assigned_to_user.username if assigned_to_user else None
+    }
 
 
 async def get_employee_task_review(employee_id ,db:AsyncSession):

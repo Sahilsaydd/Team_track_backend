@@ -39,7 +39,7 @@ from app.modules.tasks.services.task_service import (
     get_employee_task_review,
     soft_delete_group_task_service
     ,
-    export_task_report_service
+    export_task_report_service,get_task_by_id_service
 )
 
 router = APIRouter(prefix="/tasks",tags=["Tasks"])
@@ -200,7 +200,17 @@ async def get_my_tasks_api(
     )
 
 
-
+@router.get("/{task_id}")
+async def get_task_by_id(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    return await get_task_by_id_service(
+        db,
+        task_id,
+        current_user
+    )
 @router.get("/group/{group_id}")
 async def get_group_tasks_api(
     group_id: int,
