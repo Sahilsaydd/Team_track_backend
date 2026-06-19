@@ -722,9 +722,12 @@ async def get_task_by_id_service(db,task_id:int,current_user):
     # 1. Assigned Employee
     # 2. Task Creator / Group Leader
     # 3. Admin / SuperAdmin
-
+    print("Current User ID:", current_user.id)
+    print("Current User Role:", current_user.role)
+    print("Task Assigned To:", task.assigned_to)
+    print("Task Assigned By:", task.assigned_by)
     if (
-        current_user.role not in ["Admin", "SuperAdmin"]
+        current_user.role.name not in ["Admin", "SuperAdmin"]
         and task.assigned_to != current_user.id
         and task.assigned_by != current_user.id
     ):
@@ -745,6 +748,14 @@ async def get_task_by_id_service(db,task_id:int,current_user):
         assigned_to_result = await db.execute(select(User).where(User.id == task.assigned_to))
         assigned_to_user = assigned_to_result.scalar_one_or_none()
 
+    print("Current User ID:", current_user.id)
+    print("Current User Role:", current_user.role)
+    print("Task Assigned To:", task.assigned_to)
+    print("Task Assigned By:", task.assigned_by)
+    print("Authorization Condition:",
+      current_user.role not in ["Admin", "SuperAdmin"],
+      task.assigned_to != current_user.id,
+      task.assigned_by != current_user.id)
     return {
         "id": task.id,
         "title": task.title,
