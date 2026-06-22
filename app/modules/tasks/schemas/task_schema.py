@@ -96,12 +96,13 @@ class CreatePersonalTaskSchemas(BaseModel):
 
 
 class TaskReviewResponse(BaseModel):
-    id:int
-    task_id:int
-    reviewed_by:int
-    reviewed_status:str
-    comment:str | None
-    created_at:datetime
+    id: int
+    task_id: int
+    task_title: str
+    reviewer_name: str
+    reviewed_status: str
+    comment: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

@@ -1,6 +1,6 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update, desc
 from sqlalchemy.orm import aliased
 from fastapi import HTTPException, status
 from fastapi.responses import FileResponse
@@ -547,17 +547,21 @@ async def get_task_evidence_service(db: AsyncSession, task_id: int, current_user
     task_result = await db.execute(
         select(Task).where(Task.id == task_id)
     )
+
     task = task_result.scalar_one_or_none()
 
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
     current_role = getattr(getattr(current_user, "role", None), "name", None)
+    evidence_query = (
+        select(TaskEvidence)
+        .where(TaskEvidence.task_id == task_id)
+        .order_by(TaskEvidence.created_at.desc())
+    )
 
     if current_role in {"Admin", "SuperAdmin"}:
-        result = await db.execute(
-            select(TaskEvidence).where(TaskEvidence.task_id == task_id)
-        )
+        result = await db.execute(evidence_query)
         return result.scalars().all()
 
     if task.group_id:
@@ -570,15 +574,11 @@ async def get_task_evidence_service(db: AsyncSession, task_id: int, current_user
             )
         )
         if leader_result.scalar_one_or_none():
-            result = await db.execute(
-                select(TaskEvidence).where(TaskEvidence.task_id == task_id)
-            )
+            result = await db.execute(evidence_query)
             return result.scalars().all()
 
     if task.assigned_to == current_user.id or task.assigned_by == current_user.id:
-        result = await db.execute(
-            select(TaskEvidence).where(TaskEvidence.task_id == task_id)
-        )
+        result = await db.execute(evidence_query)
         return result.scalars().all()
 
     raise HTTPException(
@@ -774,21 +774,50 @@ async def get_task_by_id_service(db,task_id:int,current_user):
         "assigned_by_name": assigned_by_user.username if assigned_by_user else None,
         "assigned_to_name": assigned_to_user.username if assigned_to_user else None
     }
+async def get_employee_task_review(employee_id: int,db: AsyncSession):
 
-
-async def get_employee_task_review(employee_id ,db:AsyncSession):
     result = await db.execute(
-        select(TaskReview)
-        .join(Task, Task.id == TaskReview.task_id)
-        .where(Task.assigned_to == employee_id)
-        .order_by(TaskReview.created_at.desc(), TaskReview.id.desc())
-    )
-    review = result.scalars().unique().all()
 
-    if not review:
-        raise HTTPException(status_code=404 , detail="No task Reviews found for this employee")
-    
-    return review
+        select(
+            TaskReview.id,
+            TaskReview.task_id,
+            Task.title.label("task_title"),
+            User.username.label("reviewer_name"),
+            TaskReview.reviewed_status,
+            TaskReview.comment,
+            TaskReview.created_at
+        )
+
+        .join(
+            Task,
+            Task.id == TaskReview.task_id
+        )
+
+        .join(
+            User,
+            User.id == TaskReview.reviewed_by
+        )
+
+        .where(
+            Task.assigned_to == employee_id
+        )
+
+        .order_by(
+            TaskReview.created_at.desc(),
+            TaskReview.id.desc()
+        )
+
+    )
+
+    reviews = result.mappings().all()
+
+    if not reviews:
+        raise HTTPException(
+            status_code=404,
+            detail="No task reviews found"
+        )
+
+    return reviews
 
 
 async def soft_delete_group_task_service(
