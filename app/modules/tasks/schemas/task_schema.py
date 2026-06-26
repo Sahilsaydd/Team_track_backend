@@ -23,6 +23,7 @@ class SelfTaskSchema(BaseModel):
     description: Optional[str]
 
     priority: Optional[str] = "medium"
+    deadline:Optional[datetime]
 
 
 class UpdateTaskStatusSchema(BaseModel):

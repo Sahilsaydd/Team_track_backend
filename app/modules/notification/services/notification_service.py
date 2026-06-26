@@ -1,7 +1,9 @@
 # app/modules/notifications/services/notification_service.py
 
+from datetime import datetime, datetime, timedelta
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select ,update
 
 from fastapi import HTTPException
 
@@ -12,13 +14,7 @@ from app.modules.notification.model.notification import Notification
 # CREATE NOTIFICATION
 # =====================================================
 
-async def create_notification_service(
-    db: AsyncSession,
-    user_id: int,
-    title: str,
-    message: str,
-    notification_type: str
-):
+async def create_notification_service(db: AsyncSession,user_id: int,title: str,message: str,notification_type: str):
 
     notification = Notification(
 
@@ -44,6 +40,7 @@ async def create_notification_service(
 # GET USER NOTIFICATIONS
 # =====================================================
 
+# I want to fetch the notifications for last 24 hours only. So, I will filter the notifications based on created_at field. 
 async def get_notifications_service(
     db: AsyncSession,
     current_user
@@ -51,14 +48,15 @@ async def get_notifications_service(
 
     result = await db.execute(
         select(Notification).where(
-            Notification.user_id == current_user.id
+            Notification.user_id == current_user.id,
+            Notification.created_at >= datetime.utcnow() - timedelta(hours=24)
         ).order_by(
             Notification.created_at.desc()
         )
     )
 
     notifications = result.scalars().all()
-
+  
     return notifications
 
 
@@ -116,4 +114,24 @@ async def unread_notification_count_service(
 
     return {
         "unread_count": len(notifications)
+    }
+    
+async def mark_all_notifications_read_service(
+    db: AsyncSession,
+    current_user
+):
+
+    await db.execute(
+        update(Notification)
+        .where(
+            Notification.user_id == current_user.id,
+            Notification.is_read == False
+        )
+        .values(is_read=True)
+    )
+
+    await db.commit()
+
+    return {
+        "message": "All notifications marked as read"
     }

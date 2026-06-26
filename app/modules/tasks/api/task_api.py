@@ -37,9 +37,11 @@ from app.modules.tasks.services.task_service import (
     get_all_tasks_service,
     create_hierarchy_task_service,
     get_employee_task_review,
+    get_task_review_by_id,
     soft_delete_group_task_service
     ,
-    export_task_report_service,get_task_by_id_service
+    get_personal_assigned_tasks,
+    export_task_report_service,get_task_by_id_service,get_self_tasks
 )
 
 router = APIRouter(prefix="/tasks",tags=["Tasks"])
@@ -121,6 +123,13 @@ async def submit_task_api(
     )
 
 
+@router.get("/personal/assigned")
+async def get_personal_assigned_tasks_api(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    return await get_personal_assigned_tasks(db, current_user)
+
 
 @router.post("/{task_id}/review")
 async def review_task_api(
@@ -187,6 +196,18 @@ async def get_task_evidence_api(
 async def get_employee_task_review_service(user_id:int , db:AsyncSession =Depends(get_db)):
     return await get_employee_task_review(user_id,db)
 
+
+
+# Get Review By task id
+@router.get("/{task_id}/reviews",response_model=list[TaskReviewResponse])
+async def getTaskReviewId(task_id:int ,db:AsyncSession =Depends(get_db)):
+    return await get_task_review_by_id(task_id,db)
+
+
+
+@router.get("/self_tasks")
+async def get_self_task(db:AsyncSession = Depends(get_db),current_user = Depends(get_current_user)):
+    return  await get_self_tasks(db,current_user)
 
 @router.get("/my")
 async def get_my_tasks_api(

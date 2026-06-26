@@ -15,13 +15,11 @@ from app.modules.notification.services.notification_service import (
 
     mark_notification_read_service,
 
-    unread_notification_count_service
+    unread_notification_count_service,
+    mark_all_notifications_read_service
 )
 
-router = APIRouter(
-    prefix="/notifications",
-    tags=["Notifications"]
-)
+router = APIRouter(prefix="/notifications",tags=["Notifications"])
 
 
 # =====================================================
@@ -58,7 +56,7 @@ async def mark_notification_read_api(
     )
 
 
-# =====================================================
+# ===============================   ======================
 # GET UNREAD COUNT
 # =====================================================
 
@@ -69,6 +67,16 @@ async def unread_notification_count_api(
 ):
 
     return await unread_notification_count_service(
+        db,
+        current_user
+    )
+    
+@router.patch("/read-all")
+async def mark_all_notifications_read_api(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    return await mark_all_notifications_read_service(
         db,
         current_user
     )

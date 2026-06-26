@@ -6,7 +6,7 @@ class TaskStatus(str, enum.Enum):
     TODO = "todo"
 
     IN_PROGRESS = "in_progress"
-
+    SUBMITTED = "submitted"
     COMPLETED = "completed"
 
     BLOCKED = "blocked"

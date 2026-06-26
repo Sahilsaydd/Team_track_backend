@@ -3,6 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, desc
 from sqlalchemy.orm import aliased
 from fastapi import HTTPException, status
+import os
+
+from datetime import datetime, timedelta, timezone
+
+from fastapi import HTTPException
+from fastapi.responses import FileResponse
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import FileResponse
 from app.modules.groups.models.group_member import GroupMember
 from app.modules.tasks.models.task import Task
@@ -10,14 +19,15 @@ from app.modules.tasks.models.task_review import TaskReview
 from app.modules.tasks.models.task_log import TaskLog
 from app.modules.tasks.models.task_evidence import TaskEvidence
 import os
-import csv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.modules.notification.model.notification import (
     Notification
 )
 from sqlalchemy.orm import selectinload
 from app.modules.users.models.user import User
 from app.core.file_upload import save_upload_file
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 
 from app.modules.tasks.enums import (
     ApprovalStatus,
@@ -199,21 +209,20 @@ async def create_hierarchy_task_service(db: AsyncSession,data,current_user):
     task = Task(
 
         title=data.title,
-
         description=data.description,
-
         priority=data.priority,
-
         deadline=data.deadline,
+
         task_type="Personal",
         group_id=None,
+
         created_by=current_user.id,
         assigned_by=current_user.id,
         assigned_to=assigned_user.id,
         submitted_to=current_user.id,
+
         is_self_task=False
     )
-
     db.add(task)
 
     notification = Notification(
@@ -254,17 +263,35 @@ async def create_hierarchy_task_service(db: AsyncSession,data,current_user):
             "status": task.status,
             "approval_status": task.approval_status,
             "priority": task.priority,
-            "created_by": task.created_by,
-            "assigned_by": task.assigned_by,
-            "assigned_to": task.assigned_to,
-            "submitted_to": task.submitted_to,
+
+            "created_by": {
+                "id": current_user.id,
+                "username": current_user.username
+            },
+
+            "assigned_by": {
+                "id": current_user.id,
+                "username": current_user.username
+            },
+
+            "assigned_to": {
+                "id": assigned_user.id,
+                "username": assigned_user.username
+            },
+
+            "submitted_to": {
+                "id": current_user.id,
+                "username": current_user.username
+            },
+
             "task_type": task.task_type,
             "group_id": task.group_id,
             "is_self_task": task.is_self_task,
             "deadline": task.deadline,
-            "created_at": task.created_at,
+            "created_at": task.created_at
         }
     }
+        
    
 
 async def create_self_task_service(db: AsyncSession,data,current_user):
@@ -276,6 +303,8 @@ async def create_self_task_service(db: AsyncSession,data,current_user):
         description=data.description,
 
         priority=data.priority,
+        
+        deadline = data.deadline,
 
         created_by=current_user.id,
 
@@ -297,6 +326,15 @@ async def create_self_task_service(db: AsyncSession,data,current_user):
     return task
 
 
+async def get_self_tasks(db:AsyncSession ,current_user):
+    result= await db.execute(
+        select(Task).where(
+            Task.created_by == current_user.id,
+            Task.is_self_task == True,
+            Task.is_active == True
+        )
+    )
+    return result.scalars().all()
 
 async def update_task_status_service(db: AsyncSession,task_id: int,data,current_user):
 
@@ -382,12 +420,11 @@ async def submit_task_service(db: AsyncSession,task_id: int,current_user):
     task = result.scalar_one_or_none()
 
     if not task:
-        raise HTTPException(
-            status_code=404,
-            detail="Task not found"
-        )
+        raise HTTPException(status_code=404,detail="Task not found")
 
+    task.status =TaskStatus.SUBMITTED
     task.approval_status = ApprovalStatus.SUBMITTED
+    
 
     notification = Notification(
 
@@ -447,7 +484,13 @@ async def review_task_service(db: AsyncSession,task_id: int,data,current_user):
             detail="Only the task assigner, group leader, admin, or superadmin can review this task"
         )
 
-    task.approval_status = data.review_status
+    # task.approval_status = data.review_status
+    if data.review_status == ApprovalStatus.APPROVED:
+        task.approval_status =ApprovalStatus.APPROVED
+        task.status = TaskStatus.COMPLETED
+    elif data.review_status == ApprovalStatus.NEEDS_REVISION:
+        task.approval_status = ApprovalStatus.NEEDS_REVISION
+        task.status = TaskStatus.IN_PROGRESS
 
     review = TaskReview(
 
@@ -588,20 +631,49 @@ async def get_task_evidence_service(db: AsyncSession, task_id: int, current_user
 
 
 
-async def get_my_tasks_service(db: AsyncSession,current_user):
+async def get_personal_assigned_tasks(db: AsyncSession, current_user):
+
+    result = await db.execute(
+        select(
+            Task.id,
+            Task.title,
+            Task.description,
+            Task.priority,
+            Task.status,
+            Task.approval_status,
+            Task.deadline,
+            Task.created_at,
+            User.username.label("")
+        )
+        .join(
+            User,
+            User.id == Task.assigned_to
+        )
+        .where(
+            Task.assigned_by == current_user.id,
+            Task.task_type == "Personal",
+            Task.is_self_task == False
+        )
+        .order_by(Task.created_at.desc())
+    )
+
+    return result.mappings().all()
+
+async def get_my_tasks_service(db: AsyncSession, current_user):
 
     result = await db.execute(
         select(Task)
         .where(
             Task.assigned_to == current_user.id,
+            Task.task_type == "Personal",
+            Task.assigned_by == current_user.id,
+            Task.is_self_task == False,
             Task.is_active == True
         )
         .order_by(Task.created_at.desc(), Task.id.desc())
     )
 
     return result.scalars().all()
-
-
 
 async def get_group_tasks_service(
     db: AsyncSession,
@@ -820,11 +892,43 @@ async def get_employee_task_review(employee_id: int,db: AsyncSession):
     return reviews
 
 
-async def soft_delete_group_task_service(
-    db: AsyncSession,
-    task_id: int,
-    current_user
-):
+async def  get_task_review_by_id(taskId:int ,db:AsyncSession):
+    last_24_hours = datetime.now() - timedelta(hours=24)    
+    result = await db.execute(select(
+        TaskReview.id,
+        TaskReview.task_id,
+        Task.title.label("task_title"),
+        User.username.label("reviewer_name"),
+        TaskReview.reviewed_status,
+        TaskReview.comment,
+        TaskReview.created_at
+    ).join(
+        Task,
+        Task.id == TaskReview.task_id
+    ).join(
+        User,
+        User.id == TaskReview.reviewed_by
+        
+    )
+    .where(
+        TaskReview.task_id ==  taskId,
+        TaskReview.created_at >= last_24_hours
+    ).order_by(
+        TaskReview.created_at.desc(),
+        TaskReview.id.desc()
+        
+    )
+                            
+)
+    reviews =result.mappings().all()
+    
+    if not reviews:
+        raise HTTPException(status_code=404, detail="Reviews Not Found")
+
+    return reviews
+
+async def soft_delete_group_task_service(db: AsyncSession,task_id: int,current_user):
+
 
     task_result = await db.execute(
         select(Task).where(
@@ -872,13 +976,37 @@ async def soft_delete_group_task_service(
         "is_active": task.is_active
     }
 
-async def export_task_report_service(db: AsyncSession,current_user,report_type: str,selected_date: datetime = None):
+
+
+
+async def export_task_report_service(
+    db: AsyncSession,
+    current_user,
+    report_type: str,
+    selected_date: datetime = None
+):
 
     now = datetime.utcnow()
 
+    def _to_naive_utc(dt: datetime):
+        if dt is None:
+            return None
+
+        if dt.tzinfo is not None:
+            return dt.astimezone(timezone.utc).replace(
+                tzinfo=None
+            )
+
+        return dt
+
     if report_type == "daily":
 
-        start_date = now.replace(hour=0, minute=0, second=0)
+        start_date = now.replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0
+        )
 
     elif report_type == "weekly":
 
@@ -901,21 +1029,28 @@ async def export_task_report_service(db: AsyncSession,current_user,report_type: 
 
     if selected_date:
 
-        start_date = selected_date.replace(
+        sel = _to_naive_utc(selected_date)
+
+        start_date = sel.replace(
             hour=0,
             minute=0,
-            second=0
+            second=0,
+            microsecond=0
         )
 
-        end_date = selected_date.replace(
+        end_date = sel.replace(
             hour=23,
             minute=59,
-            second=59
+            second=59,
+            microsecond=999999
         )
 
         result = await db.execute(
             select(TaskLog, Task)
-            .join(Task, Task.id == TaskLog.task_id)
+            .join(
+                Task,
+                Task.id == TaskLog.task_id
+            )
             .where(
                 TaskLog.user_id == current_user.id,
                 TaskLog.created_at >= start_date,
@@ -927,7 +1062,10 @@ async def export_task_report_service(db: AsyncSession,current_user,report_type: 
 
         result = await db.execute(
             select(TaskLog, Task)
-            .join(Task, Task.id == TaskLog.task_id)
+            .join(
+                Task,
+                Task.id == TaskLog.task_id
+            )
             .where(
                 TaskLog.user_id == current_user.id,
                 TaskLog.created_at >= start_date
@@ -944,51 +1082,146 @@ async def export_task_report_service(db: AsyncSession,current_user,report_type: 
         )
 
     report_data = []
-    monthly_extra_hours = 0
-    monthly_leaves = 0
+
+    total_hours_worked = 0
+    total_extra_hours = 0
+    total_leaves = 0
 
     for log, task in logs:
-        worked_hours = float(log.hours_spent or 0)
-        worked_days = 1 if worked_hours > 0 else 0
-        extra_hours = max(worked_hours - 8, 0)
-        monthly_extra_hours += extra_hours
+
+        worked_hours = float(
+            log.hours_spent or 0
+        )
+
+        extra_hours = max(
+            worked_hours - 8,
+            0
+        )
+        print(f'the extra hours value is this ${extra_hours}')
+        total_hours_worked += worked_hours
+        total_extra_hours += extra_hours
 
         report_data.append({
-            "Day": log.created_at.strftime("%A"),
-            "Date / Month": log.created_at.strftime("%m/%d/%Y"),
-            "Task/Work Details (If Any)": log.work_note,
-            "Project Name": task.project_name or "N/A",
-            "Actual Worked Days": worked_days,
-            "Actual Worked Hours": worked_hours,
-            "Extra Hours Worked in the Month": extra_hours,
-            "No. Of leaves taken (Half Day = 0.5) (One Day = 1)": 0
+
+            "Sr No": len(report_data) + 1,
+
+            "Date": log.created_at.strftime(
+                "%d-%m-%Y"
+            ),
+
+            "Day": log.created_at.strftime(
+                "%A"
+            ),
+
+            "Task Title": task.title,
+
+            "Project Name": (
+                task.project_name
+                if task.project_name
+                else "N/A"
+            ),
+
+            "Work Description": (
+                log.work_note
+            ),
+
+            "Hours Worked": worked_hours,
+
+            "Extra Hours": extra_hours,
+
+            "Leaves": 0
+
         })
 
-    reports_dir = os.path.join("uploads", "reports")
+    reports_dir = os.path.join(
+        "uploads",
+        "reports"
+    )
 
-    os.makedirs(reports_dir, exist_ok=True)
+    os.makedirs(
+        reports_dir,
+        exist_ok=True
+    )
 
-    file_name = f"{report_type}_report_{current_user.id}.csv"
+    file_name = (
+        f"{report_type}_report_"
+        f"{current_user.id}.xlsx"
+    )
 
-    file_path = os.path.join(reports_dir, file_name)
+    file_path = os.path.join(
+        reports_dir,
+        file_name
+    )
 
-    headers = list(report_data[0].keys())
-    with open(file_path, "w", newline="", encoding="utf-8") as report_file:
-        writer = csv.DictWriter(report_file, fieldnames=headers)
-        writer.writeheader()
-        writer.writerows(report_data)
-        writer.writerow({})
-        writer.writerow({
-            "Task/Work Details (If Any)": "Extra Hours Worked in the Month",
-            "Actual Worked Hours": monthly_extra_hours,
-        })
-        writer.writerow({
-            "Task/Work Details (If Any)": "No. Of leaves taken",
-            "Actual Worked Hours": monthly_leaves,
-        })
+    headers = [
+
+        "Sr No",
+
+        "Date",
+
+        "Day",
+
+        "Task Title",
+
+        "Project Name",
+
+        "Work Description",
+
+        "Hours Worked",
+
+        "Extra Hours",
+
+        "Leaves"
+
+    ]
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Task Report"
+
+    sheet.append(headers)
+
+    for row in report_data:
+        sheet.append([
+            row["Sr No"],
+            row["Date"],
+            row["Day"],
+            row["Task Title"],
+            row["Project Name"],
+            row["Work Description"],
+            row["Hours Worked"],
+            row["Extra Hours"],
+            row["Leaves"],
+        ])
+
+    sheet.append([])
+    sheet.append(["WORK SUMMARY", "", "", "", "", "", "", "", ""])
+    sheet.append(["Total Tasks Logged", len(logs), "", "", "", "", "", "", ""])
+    sheet.append(["Total Hours Worked", total_hours_worked, "", "", "", "", "", "", ""])
+    sheet.append(["Total Extra Hours", total_extra_hours, "", "", "", "", "", "", ""])
+    sheet.append(["Total Leaves Taken", total_leaves, "", "", "", "", "", "", ""])
+
+    header_fill = PatternFill(fill_type="solid", fgColor="D9EAF7")
+    bold_font = Font(bold=True)
+
+    for cell in sheet[1]:
+        cell.font = bold_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+
+    for column_cells in sheet.columns:
+        max_length = 0
+        for cell in column_cells:
+            if cell.value is None:
+                continue
+            max_length = max(max_length, len(str(cell.value)))
+        adjusted_width = min(max_length + 2, 50)
+        sheet.column_dimensions[column_cells[0].column_letter].width = adjusted_width
+
+    workbook.save(file_path)
 
     return FileResponse(
         path=file_path,
         filename=file_name,
-        media_type="text/csv"
-    )   
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
