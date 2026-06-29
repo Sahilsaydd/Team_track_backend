@@ -235,6 +235,8 @@ async def create_hierarchy_task_service(db: AsyncSession,data,current_user):
 
         notification_type=f"task_assigned '{task.task_type}'"
     )
+    print("Current User:", current_user.id)
+    print("Assigned To:", assigned_user.id)
 
     db.add(notification)
 
@@ -388,6 +390,18 @@ async def add_task_log_service(db: AsyncSession,data,current_user):
     if not task:
         raise HTTPException(status_code=404,detail="Task not found")
 
+
+    # Check if this user alredy logged this task
+    existing_log = await db.scalar(
+        select(TaskLog).where(
+            TaskLog.task_id == data.task_id,
+            TaskLog.user_id == current_user.id
+        )
+    )
+
+    if existing_log:
+        raise HTTPException(status_code=400,detail="You have already logged this task")
+
     log = TaskLog(
 
         task_id=data.task_id,
@@ -401,7 +415,7 @@ async def add_task_log_service(db: AsyncSession,data,current_user):
 
     db.add(log)
 
-    await db.commit()
+    await db.commit()   
 
     await db.refresh(log)
 
@@ -424,7 +438,8 @@ async def submit_task_service(db: AsyncSession,task_id: int,current_user):
 
     task.status =TaskStatus.SUBMITTED
     task.approval_status = ApprovalStatus.SUBMITTED
-    
+    # i want to in the task completed date
+    task.completed_at = datetime.utcnow()
 
     notification = Notification(
 
@@ -432,7 +447,7 @@ async def submit_task_service(db: AsyncSession,task_id: int,current_user):
 
         title="Task Submitted",
 
-        message=f"Task '{task.title}' submitted for review",
+        message=f"Task '{task.title}' ({task.task_type}) submitted for review",
 
         notification_type="task_submitted"
     )
@@ -630,7 +645,6 @@ async def get_task_evidence_service(db: AsyncSession, task_id: int, current_user
     )
 
 
-
 async def get_personal_assigned_tasks(db: AsyncSession, current_user):
 
     result = await db.execute(
@@ -643,22 +657,21 @@ async def get_personal_assigned_tasks(db: AsyncSession, current_user):
             Task.approval_status,
             Task.deadline,
             Task.created_at,
-            User.username.label("")
+            User.username.label("assigned_by_name")
         )
         .join(
             User,
-            User.id == Task.assigned_to
+            User.id == Task.assigned_by      # Join with assigner
         )
         .where(
-            Task.assigned_by == current_user.id,
+            Task.assigned_to == current_user.id,
             Task.task_type == "Personal",
-            Task.is_self_task == False
+            Task.is_self_task.is_(False)
         )
         .order_by(Task.created_at.desc())
     )
 
     return result.mappings().all()
-
 async def get_my_tasks_service(db: AsyncSession, current_user):
 
     result = await db.execute(
@@ -977,7 +990,44 @@ async def soft_delete_group_task_service(db: AsyncSession,task_id: int,current_u
     }
 
 
+async def get_personal_tasks_for_review_service(db: AsyncSession, current_user):
 
+    role = getattr(getattr(current_user, "role", None), "name", None)
+
+    base_query = (
+        select(Task)
+        .where(
+            Task.task_type == "Personal",
+            Task.is_self_task == False,
+            Task.approval_status == ApprovalStatus.SUBMITTED
+        )
+        .order_by(Task.created_at.desc())
+    )
+
+    # 👑 SuperAdmin → sees ONLY tasks assigned BY SuperAdmin
+    if role == "SuperAdmin":
+
+        result = await db.execute(
+            base_query.where(
+                Task.assigned_by == current_user.id
+            )
+        )
+        return result.scalars().all()
+
+    # 🧑‍💼 Admin → sees ONLY tasks assigned BY Admin
+    if role == "Admin":
+
+        result = await db.execute(
+            base_query.where(
+                Task.assigned_by == current_user.id
+            )
+        )
+        return result.scalars().all()
+
+    raise HTTPException(
+        status_code=403,
+        detail="Not allowed"
+    )
 
 async def export_task_report_service(
     db: AsyncSession,
@@ -1225,3 +1275,6 @@ async def export_task_report_service(
         filename=file_name,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+    
+    
+    

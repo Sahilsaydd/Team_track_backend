@@ -41,7 +41,8 @@ from app.modules.tasks.services.task_service import (
     soft_delete_group_task_service
     ,
     get_personal_assigned_tasks,
-    export_task_report_service,get_task_by_id_service,get_self_tasks
+    export_task_report_service,get_task_by_id_service,get_self_tasks,
+    get_personal_tasks_for_review_service
 )
 
 router = APIRouter(prefix="/tasks",tags=["Tasks"])
@@ -196,7 +197,12 @@ async def get_task_evidence_api(
 async def get_employee_task_review_service(user_id:int , db:AsyncSession =Depends(get_db)):
     return await get_employee_task_review(user_id,db)
 
-
+@router.get("/personal-tasks/review")
+async def get_personal_tasks_for_review(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    return await get_personal_tasks_for_review_service(db, current_user)
 
 # Get Review By task id
 @router.get("/{task_id}/reviews",response_model=list[TaskReviewResponse])

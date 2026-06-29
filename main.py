@@ -10,6 +10,8 @@ from app.modules.users.api import user_api
 from app.modules.groups.api import group_api
 from app.modules.tasks.api import task_api
 from app.modules.notification.api import notification_api
+from app.modules.dashboard.api import dashboard_api 
+
 
 app = FastAPI()
 
@@ -22,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+app.include_router(dashboard_api.router)
 app.include_router(auth_api.router)
 app.include_router(user_api.router)
 app.include_router(group_api.router)
